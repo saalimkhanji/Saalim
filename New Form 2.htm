@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Site Wise Expense Tracker</title>
+
+  <!-- ✅ Select2 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+  <!-- ✅ SheetJS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- ✅ Select2 JS -->
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+
+    .form-container input, .form-container select, .form-container button {
+      margin: 5px;
+      padding: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    table, th, td {
+      border: 1px solid #ccc;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: center;
+    }
+
+    .form-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .form-container > * {
+      flex: 1 1 180px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    hr {
+      margin: 30px 0 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Site Wise Expense Tracker</h2>
+
+  <!-- ✅ Entry Form -->
+  <div class="form-container">
+    <input type="date" id="date" required>
+
+    <select id="site" style="width: 100%" required>
+      <option value="">Select a Site</option>
+      <option value="Site A">Site A</option>
+      <option value="Site B">Site B</option>
+      <option value="Site C">Site C</option>
+      <option value="Site D">Site D</option>
+      <option value="Site E">Site E</option>
+    </select>
+
+    <select id="team" style="width: 100%" required>
+      <option value="">Select a Team</option>
+      <option value="Team Alpha">Team Alpha</option>
+      <option value="Team Beta">Team Beta</option>
+      <option value="Team Gamma">Team Gamma</option>
+      <option value="Team Delta">Team Delta</option>
+    </select>
+
+    <input type="text" id="activity" placeholder="Activity" required>
+    <input type="number" id="amountIn" placeholder="Amount In" required>
+    <input type="number" id="amountOut" placeholder="Amount Out" required>
+
+    <button id="saveBtn" onclick="saveEntry()">Save Entry</button>
+    <button onclick="exportToExcel()">Download Excel</button>
+  </div>
+
+  <!-- ✅ Filters -->
+  <hr>
+  <div class="form-container">
+    <select id="filterSite" style="width: 100%">
+      <option value="">All Sites</option>
+      <option value="Site A">Site A</option>
+      <option value="Site B">Site B</option>
+      <option value="Site C">Site C</option>
+      <option value="Site D">Site D</option>
+      <option value="Site E">Site E</option>
+    </select>
+
+    <select id="filterTeam" style="width: 100%">
+      <option value="">All Teams</option>
+      <option value="Team Alpha">Team Alpha</option>
+      <option value="Team Beta">Team Beta</option>
+      <option value="Team Gamma">Team Gamma</option>
+      <option value="Team Delta">Team Delta</option>
+    </select>
+
+    <input type="date" id="filterDateFrom" placeholder="From Date">
+    <input type="date" id="filterDateTo" placeholder="To Date">
+
+    <button onclick="applyFilters()">Apply Filter</button>
+    <button onclick="clearFilters()">Clear Filter</button>
+  </div>
+
+  <!-- ✅ Table -->
+  <table id="expenseTable">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Site Name</th>
+        <th>Team Name</th>
+        <th>Activity</th>
+        <th>Amount In</th>
+        <th>Amount Out</th>
+        <th>Balance</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- ✅ Script -->
+  <script>
+    const tableBody = document.querySelector('#expenseTable tbody');
+
+    window.onload = () => {
+      loadEntries();
+
+      $('#site, #team, #filterSite, #filterTeam').select2({
+        placeholder: "Select...",
+        allowClear: true
+      });
+    };
+
+    function loadEntries(filtered = false) {
+      let entries = JSON.parse(localStorage.getItem('expenses')) || [];
+
+      if (filtered) {
+        const site = document.getElementById('filterSite').value;
+        const team = document.getElementById('filterTeam').value;
+        const dateFrom = document.getElementById('filterDateFrom').value;
+        const dateTo = document.getElementById('filterDateTo').value;
+
+        entries = entries.filter(entry => {
+          const matchSite = !site || entry.site === site;
+          const matchTeam = !team || entry.team === team;
+          const matchDateFrom = !dateFrom || entry.date >= dateFrom;
+          const matchDateTo = !dateTo || entry.date <= dateTo;
+          return matchSite && matchTeam && matchDateFrom && matchDateTo;
+        });
+      }
+
+      tableBody.innerHTML = '';
+      entries.forEach((entry, index) => {
+        const row = tableBody.insertRow();
+        Object.values(entry).forEach(val => {
+          const cell = row.insertCell();
+          cell.textContent = val;
+        });
+
+        const actionCell = row.insertCell();
+        actionCell.innerHTML = `
+          <button onclick="editEntry(${index})">Edit</button>
+          <button onclick="deleteEntry(${index})">Delete</button>
+        `;
+      });
+    }
+
+    function saveEntry(isEdit = false, editIndex = -1) {
+      const date = document.getElementById('date').value;
+      const site = document.getElementById('site').value;
+      const team = document.getElementById('team').value;
+      const activity = document.getElementById('activity').value;
+      const amountIn = parseFloat(document.getElementById('amountIn').value) || 0;
+      const amountOut = parseFloat(document.getElementById('amountOut').value) || 0;
+      const balance = amountIn - amountOut;
+
+      if (!date || !site || !team || !activity) {
+        alert("Please fill in all fields.");
+        return;
+      }
+
+      const newEntry = {
+        date, site, team, activity,
+        amountIn: amountIn.toFixed(2),
+        amountOut: amountOut.toFixed(2),
+        balance: balance.toFixed(2)
+      };
+
+      let entries = JSON.parse(localStorage.getItem('expenses')) || [];
+
+      if (isEdit && editIndex !== -1) {
+        entries[editIndex] = newEntry;
+      } else {
+        entries.push(newEntry);
+      }
+
+      localStorage.setItem('expenses', JSON.stringify(entries));
+      clearForm();
+      loadEntries();
+    }
+
+    function editEntry(index) {
+      const entries = JSON.parse(localStorage.getItem('expenses')) || [];
+      const entry = entries[index];
+
+      document.getElementById('date').value = entry.date;
+      $('#site').val(entry.site).trigger('change');
+      $('#team').val(entry.team).trigger('change');
+      document.getElementById('activity').value = entry.activity;
+      document.getElementById('amountIn').value = entry.amountIn;
+      document.getElementById('amountOut').value = entry.amountOut;
+
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.textContent = "Update Entry";
+      saveBtn.setAttribute('onclick', `saveEntry(true, ${index})`);
+    }
+
+    function deleteEntry(index) {
+      if (!confirm("Are you sure you want to delete this entry?")) return;
+
+      const entries = JSON.parse(localStorage.getItem('expenses')) || [];
+      entries.splice(index, 1);
+      localStorage.setItem('expenses', JSON.stringify(entries));
+      loadEntries();
+    }
+
+    function clearForm() {
+      document.getElementById('date').value = '';
+      $('#site').val('').trigger('change');
+      $('#team').val('').trigger('change');
+      document.getElementById('activity').value = '';
+      document.getElementById('amountIn').value = '';
+      document.getElementById('amountOut').value = '';
+
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.textContent = "Save Entry";
+      saveBtn.setAttribute('onclick', `saveEntry()`);
+    }
+
+    function exportToExcel() {
+      const entries = JSON.parse(localStorage.getItem('expenses')) || [];
+      if (entries.length === 0) {
+        alert("No data to export.");
+        return;
+      }
+
+      const worksheet = XLSX.utils.json_to_sheet(entries);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Expenses");
+
+      XLSX.writeFile(workbook, "SiteWiseExpenses.xlsx");
+    }
+
+    function applyFilters() {
+      loadEntries(true);
+    }
+
+    function clearFilters() {
+      $('#filterSite').val('').trigger('change');
+      $('#filterTeam').val('').trigger('change');
+      document.getElementById('filterDateFrom').value = '';
+      document.getElementById('filterDateTo').value = '';
+      loadEntries();
+    }
+  </script>
+
+</body>
+</html>
